@@ -148,7 +148,8 @@ for /f %i in (extensions.txt) do code --install-extension %i
             )
             
             if result.returncode == 0:
-                with open(export_path, 'w', encoding='utf-8') as f:
+                # 直接写入命令输出，保持原始格式
+                with open(export_path, 'w', encoding='utf-8', newline='') as f:
                     f.write(result.stdout)
                 messagebox.showinfo("成功", f"扩展列表已导出到:\n{export_path}")
             else:
@@ -156,7 +157,7 @@ for /f %i in (extensions.txt) do code --install-extension %i
         except Exception as e:
             error_msg = str(e)
             if "WinError 2" in error_msg:
-                messagebox.showerror("错误", "无法找到 VS Code。请确保 VS Code 已正确安装，并已添加到系统环境变量中。")
+                messagebox.showerror("错误", "无法找到 VS Code。请确保 VS Code 已正确安装。")
             else:
                 messagebox.showerror("错误", f"导出过程中发生错误:\n{error_msg}")
             
@@ -167,35 +168,42 @@ for /f %i in (extensions.txt) do code --install-extension %i
             return
             
         try:
-            with open(install_path, 'r', encoding='utf-8') as f:
-                extensions = f.read().splitlines()
+            # 创建临时批处理文件
+            bat_path = os.path.join(os.path.dirname(install_path), "install_extensions.bat")
+            with open(bat_path, 'w', encoding='utf-8') as f:
+                f.write(f'@echo off\n')
+                f.write(f'echo 正在安装 VS Code 扩展...\n')
+                f.write(f'for /f "tokens=*" %%i in ({os.path.basename(install_path)}) do (\n')
+                f.write(f'    echo 正在安装: %%i\n')
+                f.write(f'    "{self.vscode_path}" --install-extension %%i\n')
+                f.write(f')\n')
+                f.write(f'echo 安装完成\n')
+                f.write(f'pause\n')
             
-            success_count = 0
-            failed_extensions = []
+            # 执行批处理文件
+            result = subprocess.run(
+                [bat_path],
+                cwd=os.path.dirname(install_path),
+                shell=True,
+                text=True,
+                stderr=subprocess.PIPE
+            )
             
-            for ext in extensions:
-                if ext.strip():  # 跳过空行
-                    result = subprocess.run(
-                        [self.vscode_path, "--install-extension", ext.strip()],
-                        capture_output=True,
-                        text=True
-                    )
-                    
-                    if result.returncode == 0:
-                        success_count += 1
-                    else:
-                        failed_extensions.append(f"{ext.strip()} (错误: {result.stderr.strip()})")
-            
-            status = f"安装完成\n成功: {success_count} 个扩展"
-            if failed_extensions:
-                status += f"\n失败: {len(failed_extensions)} 个扩展\n"
-                status += "失败列表:\n" + "\n".join(failed_extensions)
-            
-            messagebox.showinfo("安装结果", status)
+            # 删除临时批处理文件
+            try:
+                os.remove(bat_path)
+            except:
+                pass
+                
+            if result.returncode == 0:
+                messagebox.showinfo("完成", "扩展安装已完成")
+            else:
+                messagebox.showerror("错误", f"安装过程中出现错误\n{result.stderr}")
+                
         except Exception as e:
             error_msg = str(e)
             if "WinError 2" in error_msg:
-                messagebox.showerror("错误", "无法找到 VS Code。请确保 VS Code 已正确安装，并已添加到系统环境变量中。")
+                messagebox.showerror("错误", "无法找到 VS Code。请确保 VS Code 已正确安装。")
             else:
                 messagebox.showerror("错误", f"安装过程中发生错误:\n{error_msg}")
 
